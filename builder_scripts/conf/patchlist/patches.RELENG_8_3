@@ -121,3 +121,8 @@
 ~~udp_crash_workaround.diff~
 -p1~~set_ifaddr_first.diff~
 ~~pam_remove_nullok.diff~
+-p1~~from-8-STABLE/bge/if_bge.c.patch~
+-p1~~from-8-STABLE/bge/if_bgereg.h.patch~
+-p1~~from-8-STABLE/bge/mii_brgphy.c.patch~
+-p1~~from-8-STABLE/bge/pcireg.h.patch~
+-p1~~from-8-STABLE/bge/pcireg.h.2.patch~
