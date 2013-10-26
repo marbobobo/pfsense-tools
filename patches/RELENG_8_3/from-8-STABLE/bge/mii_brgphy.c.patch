@@ -1,0 +1,103 @@
+--- src/sys/dev/mii/brgphy.c	2012-11-17 03:25:19.000000000 -0500
++++ src/sys/dev/mii/brgphy.c	2013-10-17 16:39:18.000000000 -0400
+@@ -31,7 +31,7 @@
+  */
+ 
+ #include <sys/cdefs.h>
+-__FBSDID("$FreeBSD: src/sys/dev/mii/brgphy.c,v 1.78.2.25.2.2 2012/11/17 08:25:19 svnexp Exp $");
++__FBSDID("$FreeBSD: stable/8/sys/dev/mii/brgphy.c 245866 2013-01-24 02:20:25Z yongari $");
+ 
+ /*
+  * Driver for the Broadcom BCM54xx/57xx 1000baseTX PHY.
+@@ -217,11 +217,18 @@
+ 	bsc->mii_model = MII_MODEL(ma->mii_id2);
+ 	bsc->mii_rev = MII_REV(ma->mii_id2);
+ 	bsc->serdes_flags = 0;
++	ifp = sc->mii_pdata->mii_ifp;
+ 
+ 	if (bootverbose)
+ 		device_printf(dev, "OUI 0x%06x, model 0x%04x, rev. %d\n",
+ 		    bsc->mii_oui, bsc->mii_model, bsc->mii_rev);
+ 
++	/* Find the MAC driver associated with this PHY. */
++	if (strcmp(ifp->if_dname, "bge") == 0)
++		bge_sc = ifp->if_softc;
++	else if (strcmp(ifp->if_dname, "bce") == 0)
++		bce_sc = ifp->if_softc;
++
+ 	/* Handle any special cases based on the PHY ID */
+ 	switch (bsc->mii_oui) {
+ 	case MII_OUI_xxBROADCOM:
+@@ -252,22 +259,21 @@
+ 			sc->mii_flags |= MIIF_HAVEFIBER;
+ 			break;
+ 		case MII_MODEL_xxBROADCOM_ALT1_BCM5709S:
+-			bsc->serdes_flags |= BRGPHY_5709S;
++			/*
++			 * XXX
++			 * 5720S and 5709S shares the same PHY id.
++			 * Assume 5720S PHY if parent device is bge(4).
++			 */
++			if (bge_sc != NULL)
++				bsc->serdes_flags |= BRGPHY_5708S;
++			else
++				bsc->serdes_flags |= BRGPHY_5709S;
+ 			sc->mii_flags |= MIIF_HAVEFIBER;
+ 			break;
+ 		}
+ 		break;
+ 	}
+ 
+-	ifp = sc->mii_pdata->mii_ifp;
+-
+-	/* Find the MAC driver associated with this PHY. */
+-	if (strcmp(ifp->if_dname, "bge") == 0)	{
+-		bge_sc = ifp->if_softc;
+-	} else if (strcmp(ifp->if_dname, "bce") == 0) {
+-		bce_sc = ifp->if_softc;
+-	}
+-
+ 	brgphy_reset(sc);
+ 
+ 	/* Read the PHY's capabilities. */
+@@ -628,6 +634,11 @@
+ 		    (sc->mii_flags & MIIF_FORCEPAUSE) != 0)
+ 			anar |= BRGPHY_ANAR_PC | BRGPHY_ANAR_ASP;
+ 		PHY_WRITE(sc, BRGPHY_MII_ANAR, anar);
++		ktcr = BRGPHY_1000CTL_AFD | BRGPHY_1000CTL_AHD;
++		if (bsc->mii_model == MII_MODEL_xxBROADCOM_BCM5701)
++			ktcr |= BRGPHY_1000CTL_MSE | BRGPHY_1000CTL_MSC;
++		PHY_WRITE(sc, BRGPHY_MII_1000CTL, ktcr);
++		PHY_READ(sc, BRGPHY_MII_1000CTL);
+ 	} else {
+ 		anar = BRGPHY_SERDES_ANAR_FDX | BRGPHY_SERDES_ANAR_HDX;
+ 		if ((media & IFM_FLOW) != 0 ||
+@@ -636,12 +647,6 @@
+ 		PHY_WRITE(sc, BRGPHY_SERDES_ANAR, anar);
+ 	}
+ 
+-	ktcr = BRGPHY_1000CTL_AFD | BRGPHY_1000CTL_AHD;
+-	if (bsc->mii_model == MII_MODEL_xxBROADCOM_BCM5701)
+-		ktcr |= BRGPHY_1000CTL_MSE | BRGPHY_1000CTL_MSC;
+-	PHY_WRITE(sc, BRGPHY_MII_1000CTL, ktcr);
+-	ktcr = PHY_READ(sc, BRGPHY_MII_1000CTL);
+-
+ 	PHY_WRITE(sc, BRGPHY_MII_BMCR, BRGPHY_BMCR_AUTOEN |
+ 	    BRGPHY_BMCR_STARTNEG);
+ 	PHY_WRITE(sc, BRGPHY_MII_IMR, 0xFF00);
+@@ -940,6 +945,15 @@
+ 			break;
+ 		}
+ 		break;
++	case MII_OUI_xxBROADCOM_ALT2:
++		switch (bsc->mii_model) {
++		case MII_MODEL_xxBROADCOM_ALT2_BCM5717C:
++		case MII_MODEL_xxBROADCOM_ALT2_BCM5719C:
++		case MII_MODEL_xxBROADCOM_ALT2_BCM5720C:
++		case MII_MODEL_xxBROADCOM_ALT2_BCM57765:
++			return;
++		}
++		break;
+ 	}
+ 
+ 	ifp = sc->mii_pdata->mii_ifp;
